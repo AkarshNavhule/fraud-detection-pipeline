@@ -40,6 +40,10 @@ class TransactionPayload(BaseModel):
 cap_outliers = lambda x: 10000.0 if x > 10000.0 else x
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 @app.post("/predict")
 async def score_transaction(tx: TransactionPayload):
     try:
