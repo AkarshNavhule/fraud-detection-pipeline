@@ -1,0 +1,64 @@
+name: Deploy MLOps Pipeline to Azure
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows you to run the action manually from the GitHub UI
+
+env:
+  AZURE_CONTAINER_REGISTRY: yourregistryname.azurecr.io
+  RESOURCE_GROUP: your-resource-group
+  BACKEND_APP_NAME: fraud-backend-app
+  FRONTEND_APP_NAME: fraud-frontend-app
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # 1. Log in to Azure
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # 2. Log in to Azure Container Registry (ACR)
+      - name: Log in to ACR
+        run: az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+
+      # 3. Build & Push Backend
+      - name: Build and Push Backend Docker Image
+        run: |
+          cd backend
+          docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}/fraud-backend:${{ github.sha }} .
+          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}/fraud-backend:${{ github.sha }}
+
+      # 4. Build & Push Frontend (Injecting Production Backend URL)
+      - name: Build and Push Frontend Docker Image
+        run: |
+          cd frontend
+          docker build \
+            --build-arg REACT_APP_API_BASE_URL=https://${{ env.BACKEND_APP_NAME }}.azurecontainerapps.io \
+            -t ${{ env.AZURE_CONTAINER_REGISTRY }}/fraud-frontend:${{ github.sha }} .
+          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}/fraud-frontend:${{ github.sha }}
+
+      # 5. Deploy Backend to Azure Container Apps
+      - name: Deploy Backend to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          imageToDeploy: ${{ env.AZURE_CONTAINER_REGISTRY }}/fraud-backend:${{ github.sha }}
+          containerAppName: ${{ env.BACKEND_APP_NAME }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          environmentVariables: "SUPABASE_URL=${{ secrets.SUPABASE_URL }} SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+
+      # 6. Deploy Frontend to Azure Container Apps
+      - name: Deploy Frontend to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          imageToDeploy: ${{ env.AZURE_CONTAINER_REGISTRY }}/fraud-frontend:${{ github.sha }}
+          containerAppName: ${{ env.FRONTEND_APP_NAME }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
