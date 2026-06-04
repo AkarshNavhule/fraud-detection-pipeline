@@ -4,10 +4,22 @@ import time
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+
 from .ml_model import predict_fraud
 from .database import supabase
 
 app = FastAPI(title="Fraud Detection MLOps API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (React frontend)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods including OPTIONS and POST
+    allow_headers=["*"],
+)
+
+
 
 # We use these variables to control our background worker
 is_streaming = False
@@ -90,7 +102,11 @@ async def get_recent_transactions():
                 "id": row["id"],
                 "amount": f"${row['tx_amount']:.2f}",
                 "fraud_flag": "🚨 FRAUD" if row["model_prediction"] else "✅ CLEAN",
-                "time": row["created_at"]
+                "time": row["created_at"],
+                "dist_from_home": row["dist_from_home"],
+                "dist_from_last_tx":row["dist_from_last_tx"],
+                "ratio_to_median":row["ratio_to_median"],
+                "pin_used":row["pin_used"],
             }
             for row in response.data
         ]
